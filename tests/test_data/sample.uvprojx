@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<Project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="project_projx.xsd">
+
+  <SchemaVersion>2.1</SchemaVersion>
+
+  <Header>### uVision Project, (C) Keil Software</Header>
+
+  <Targets>
+    <Target>
+      <TargetName>Target 1</TargetName>
+      <TargetOption>
+        <TargetCommonOption>
+          <Device>STM32F103C8</Device>
+          <Cpu>IRAM(0x20000000,0x5000) IROM(0x08000000,0x10000) CPUTYPE("Cortex-M3") CLOCK(12000000) ELITTLE</Cpu>
+        </TargetCommonOption>
+        <TargetArmAds>
+          <Cads>
+            <VariousControls>
+              <Define>USE_HAL_DRIVER,STM32F103xB</Define>
+              <IncludePath>..\Inc;..\Drivers\CMSIS\Include;..\Drivers\STM32F1xx_HAL_Driver\Inc</IncludePath>
+            </VariousControls>
+          </Cads>
+        </TargetArmAds>
+      </TargetOption>
+      <Groups>
+        <Group>
+          <GroupName>Application/User</GroupName>
+          <Files>
+            <File>
+              <FileName>main.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Src\main.c</FilePath>
+            </File>
+            <File>
+              <FileName>stm32f1xx_it.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Src\stm32f1xx_it.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Drivers/STM32F1xx_HAL_Driver</GroupName>
+          <Files>
+            <File>
+              <FileName>stm32f1xx_hal.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Drivers\STM32F1xx_HAL_Driver\Src\stm32f1xx_hal.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+      </Groups>
+    </Target>
+  </Targets>
+
+</Project>
