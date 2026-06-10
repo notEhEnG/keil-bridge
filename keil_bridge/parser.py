@@ -79,6 +79,7 @@ class KeilTarget:
         self.linker_script: str = ""
         self.output_name: str = ""
         self.output_dir: str = ""
+        self.listing_dir: str = ""
         self.optimization: str = ""
 
     def __repr__(self) -> str:
@@ -149,6 +150,10 @@ class KeilProject:
                     output_dir_node = common_option.find("OutputDirectory")
                     if output_dir_node is not None and output_dir_node.text:
                         target.output_dir = output_dir_node.text.strip().replace("\\", "/")
+
+                    listing_path_node = common_option.find("ListingPath")
+                    if listing_path_node is not None and listing_path_node.text:
+                        target.listing_dir = listing_path_node.text.strip().replace("\\", "/")
 
             # Parse compiler flags (defines & includes)
             if target_option is not None:

@@ -14,6 +14,11 @@ from keil_bridge.cmake_exporter import CMakeExporter
 from keil_bridge.flash_uploader import FlashUploader
 from keil_bridge.watcher import FileWatcher
 from keil_bridge.target_diff import TargetDiff
+from keil_bridge.map_analyzer import MapAnalyzer
+from keil_bridge.vscode_generator import VSCodeGenerator
+from keil_bridge.linter import Linter
+from keil_bridge.ci_generator import CIGenerator
+from keil_bridge.cleaner import ProjectCleaner
 
 console = Console()
 
@@ -73,7 +78,12 @@ def interactive_menu(project_path: str, initial_target: Optional[str] = None):
         console.print("  [cyan]7[/cyan])  Flash Firmware to MCU")
         console.print("  [cyan]8[/cyan])  Watch & Auto-Build")
         console.print("  [cyan]9[/cyan])  Compare Two Targets")
-        console.print("  [cyan]10[/cyan]) Exit")
+        console.print("  [cyan]10[/cyan]) Memory Usage Analysis (.map)")
+        console.print("  [cyan]11[/cyan]) Generate VS Code debug config")
+        console.print("  [cyan]12[/cyan]) Run Static Analysis (lint)")
+        console.print("  [cyan]13[/cyan]) Generate CI Workflow")
+        console.print("  [cyan]14[/cyan]) Smart Clean")
+        console.print("  [cyan]15[/cyan]) Exit")
 
         try:
             action = input("\nEnter action number: ").strip()
@@ -142,6 +152,21 @@ def interactive_menu(project_path: str, initial_target: Optional[str] = None):
                 except (ValueError, KeyboardInterrupt):
                     console.print("[red]Invalid input.[/red]")
             elif action == "10":
+                analyzer = MapAnalyzer(project, console)
+                analyzer.parse_and_show(selected_target)
+            elif action == "11":
+                generator = VSCodeGenerator(project, console)
+                generator.generate(selected_target, "stlink")
+            elif action == "12":
+                linter = Linter(project, console)
+                linter.lint(selected_target)
+            elif action == "13":
+                generator = CIGenerator(project, console)
+                generator.generate("github")
+            elif action == "14":
+                cleaner = ProjectCleaner(project, console)
+                cleaner.clean(selected_target)
+            elif action == "15":
                 console.print("[blue]Exiting.[/blue]")
                 return
             else:
@@ -257,6 +282,33 @@ def main():
     p_diff.add_argument("--target-a", required=True, help="First target name")
     p_diff.add_argument("--target-b", required=True, help="Second target name")
 
+    # Command: size
+    p_size = subparsers.add_parser("size", help="Analyze Memory Usage from .map file")
+    p_size.add_argument("-p", "--project", help="Path to .uvprojx project file")
+    p_size.add_argument("-t", "--target", help="Name of target to analyze")
+
+    # Command: vscode
+    p_vscode = subparsers.add_parser("vscode", help="Generate VS Code launch.json and tasks.json")
+    p_vscode.add_argument("-p", "--project", help="Path to .uvprojx project file")
+    p_vscode.add_argument("-t", "--target", help="Name of target")
+    p_vscode.add_argument("--debugger", default="stlink", choices=["stlink", "openocd", "jlink"], help="Debugger to use in launch.json (default: stlink)")
+
+    # Command: lint
+    p_lint = subparsers.add_parser("lint", help="Run clang-tidy static analysis on project files")
+    p_lint.add_argument("-p", "--project", help="Path to .uvprojx project file")
+    p_lint.add_argument("-t", "--target", help="Name of target to analyze")
+
+    # Command: ci
+    p_ci = subparsers.add_parser("ci", help="Generate CI workflow templates")
+    p_ci.add_argument("-p", "--project", help="Path to .uvprojx project file")
+    p_ci.add_argument("--provider", default="github", choices=["github"], help="CI Provider to target")
+
+    # Command: clean
+    p_clean = subparsers.add_parser("clean", help="Smart clean compilation artifacts")
+    p_clean.add_argument("-p", "--project", help="Path to .uvprojx project file")
+    p_clean.add_argument("-t", "--target", help="Name of target to clean")
+    p_clean.add_argument("-a", "--all", action="store_true", help="Clean all targets")
+
     args = parser.parse_args()
 
     # Auto-detection of project file if not specified
@@ -350,6 +402,26 @@ def main():
     elif args.command == "diff":
         differ = TargetDiff(project)
         differ.diff(args.target_a, args.target_b)
+
+    elif args.command == "size":
+        analyzer = MapAnalyzer(project, console)
+        analyzer.parse_and_show(args.target or args.default_target)
+
+    elif args.command == "vscode":
+        generator = VSCodeGenerator(project, console)
+        generator.generate(args.target or args.default_target, args.debugger)
+
+    elif args.command == "lint":
+        linter = Linter(project, console)
+        linter.lint(args.target or args.default_target)
+
+    elif args.command == "ci":
+        generator = CIGenerator(project, console)
+        generator.generate(args.provider)
+
+    elif args.command == "clean":
+        cleaner = ProjectCleaner(project, console)
+        cleaner.clean(args.target or args.default_target, all_targets=args.all)
 
 
 if __name__ == "__main__":
