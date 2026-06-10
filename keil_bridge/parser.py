@@ -61,6 +61,14 @@ class KeilGroup:
 class KeilTarget:
     """Represents a build target in a Keil project."""
 
+    OPTIMIZATION_MAP = {
+        "0": "-O0 (None)",
+        "1": "-O1",
+        "2": "-O2",
+        "3": "-O3 (Maximum)",
+        "4": "-Oz (Size)",
+    }
+
     def __init__(self, name: str, device: str, cpu: str = ""):
         self.name = name
         self.device = device
@@ -68,6 +76,10 @@ class KeilTarget:
         self.include_paths: List[str] = []
         self.defines: List[str] = []
         self.groups: List[KeilGroup] = []
+        self.linker_script: str = ""
+        self.output_name: str = ""
+        self.output_dir: str = ""
+        self.optimization: str = ""
 
     def __repr__(self) -> str:
         return (
@@ -126,6 +138,18 @@ class KeilProject:
 
             target = KeilTarget(target_name, device, cpu)
 
+            # Parse output configuration from TargetCommonOption
+            if target_option is not None:
+                common_option = target_option.find("TargetCommonOption")
+                if common_option is not None:
+                    output_name_node = common_option.find("OutputName")
+                    if output_name_node is not None and output_name_node.text:
+                        target.output_name = output_name_node.text.strip()
+
+                    output_dir_node = common_option.find("OutputDirectory")
+                    if output_dir_node is not None and output_dir_node.text:
+                        target.output_dir = output_dir_node.text.strip().replace("\\", "/")
+
             # Parse compiler flags (defines & includes)
             if target_option is not None:
                 # Typically under <TargetArmAds>/<Cads>/<VariousControls>
@@ -147,6 +171,12 @@ class KeilProject:
                                     if d.strip()
                                 ]
 
+                            # Parse optimization level
+                            optimize_node = cads.find("Optimize")
+                            if optimize_node is not None and optimize_node.text:
+                                raw_opt = optimize_node.text.strip()
+                                target.optimization = KeilTarget.OPTIMIZATION_MAP.get(raw_opt, f"Level {raw_opt}")
+
                             # Parse include paths
                             include_node = controls.find("IncludePath")
                             if include_node is not None and include_node.text:
@@ -157,6 +187,13 @@ class KeilProject:
                                     p = p.strip()
                                     if p:
                                         target.include_paths.append(p.replace("\\", "/"))
+
+                    # Parse linker script from LDads
+                    ldads = arm_ads.find("LDads")
+                    if ldads is not None:
+                        scatter_node = ldads.find("ScatterFile")
+                        if scatter_node is not None and scatter_node.text:
+                            target.linker_script = scatter_node.text.strip().replace("\\", "/")
 
             # Parse source groups & files
             groups_node = target_node.find("Groups")

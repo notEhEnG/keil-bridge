@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+from collections import Counter
 from typing import List, Optional
 from rich.console import Console
 from rich.table import Table
@@ -10,6 +11,9 @@ from keil_bridge.parser import KeilProject
 from keil_bridge.builder import KeilBuilder
 from keil_bridge.lsp_generator import LspGenerator
 from keil_bridge.cmake_exporter import CMakeExporter
+from keil_bridge.flash_uploader import FlashUploader
+from keil_bridge.watcher import FileWatcher
+from keil_bridge.target_diff import TargetDiff
 
 console = Console()
 
@@ -60,13 +64,16 @@ def interactive_menu(project_path: str, initial_target: Optional[str] = None):
     while True:
         console.print(f"\n[bold]Selected Target:[/bold] [green]{selected_target}[/green]\n")
         console.print("[bold]Select Action:[/bold]")
-        console.print("  [cyan]1[/cyan]) Change Target")
-        console.print("  [cyan]2[/cyan]) View Project Target Info")
-        console.print("  [cyan]3[/cyan]) Build Target")
-        console.print("  [cyan]4[/cyan]) Clean & Rebuild Target")
-        console.print("  [cyan]5[/cyan]) Generate compile_commands.json (LSP)")
-        console.print("  [cyan]6[/cyan]) Export to CMakeLists.txt")
-        console.print("  [cyan]7[/cyan]) Exit")
+        console.print("  [cyan]1[/cyan])  Change Target")
+        console.print("  [cyan]2[/cyan])  View Project Target Info")
+        console.print("  [cyan]3[/cyan])  Build Target")
+        console.print("  [cyan]4[/cyan])  Clean & Rebuild Target")
+        console.print("  [cyan]5[/cyan])  Generate compile_commands.json (LSP)")
+        console.print("  [cyan]6[/cyan])  Export to CMakeLists.txt")
+        console.print("  [cyan]7[/cyan])  Flash Firmware to MCU")
+        console.print("  [cyan]8[/cyan])  Watch & Auto-Build")
+        console.print("  [cyan]9[/cyan])  Compare Two Targets")
+        console.print("  [cyan]10[/cyan]) Exit")
 
         try:
             action = input("\nEnter action number: ").strip()
@@ -112,6 +119,29 @@ def interactive_menu(project_path: str, initial_target: Optional[str] = None):
                 out_file = exporter.export(target_name=selected_target)
                 console.print(f"[bold green]✓[/bold green] Exported CMakeLists.txt at: [cyan]{out_file}[/cyan]")
             elif action == "7":
+                uploader = FlashUploader(project)
+                uploader.flash(target_name=selected_target)
+            elif action == "8":
+                watcher = FileWatcher(project)
+                watcher.watch(target_name=selected_target)
+            elif action == "9":
+                if len(targets) < 2:
+                    console.print("[yellow]Need at least 2 targets to compare.[/yellow]")
+                    continue
+                console.print("\n[bold]Select Target A:[/bold]")
+                for idx, t in enumerate(targets):
+                    console.print(f"  [cyan]{idx + 1}[/cyan]) {t}")
+                try:
+                    choice_a = int(input("Enter number for Target A: ").strip()) - 1
+                    choice_b = int(input("Enter number for Target B: ").strip()) - 1
+                    if 0 <= choice_a < len(targets) and 0 <= choice_b < len(targets):
+                        differ = TargetDiff(project)
+                        differ.diff(targets[choice_a], targets[choice_b])
+                    else:
+                        console.print("[red]Invalid target selection.[/red]")
+                except (ValueError, KeyboardInterrupt):
+                    console.print("[red]Invalid input.[/red]")
+            elif action == "10":
                 console.print("[blue]Exiting.[/blue]")
                 return
             else:
@@ -122,7 +152,7 @@ def interactive_menu(project_path: str, initial_target: Optional[str] = None):
 
 
 def show_info(project: KeilProject, target_name: Optional[str] = None):
-    """Prints target settings and source files list."""
+    """Prints target settings, source files, and file count summary."""
     target = project.get_target(target_name)
 
     # Print general target settings
@@ -130,6 +160,10 @@ def show_info(project: KeilProject, target_name: Optional[str] = None):
     info_table.add_row("[bold cyan]Device (MCU):[/bold cyan]", target.device)
     info_table.add_row("[bold cyan]CPU Architecture:[/bold cyan]", target.cpu)
     info_table.add_row("[bold cyan]Define flags:[/bold cyan]", " ".join(target.defines) if target.defines else "None")
+    info_table.add_row("[bold cyan]Optimization:[/bold cyan]", target.optimization or "Default")
+    info_table.add_row("[bold cyan]Output Name:[/bold cyan]", target.output_name or "N/A")
+    info_table.add_row("[bold cyan]Output Directory:[/bold cyan]", target.output_dir or "N/A")
+    info_table.add_row("[bold cyan]Linker Script:[/bold cyan]", target.linker_script or "N/A")
     console.print(info_table)
 
     # Print include paths
@@ -140,12 +174,29 @@ def show_info(project: KeilProject, target_name: Optional[str] = None):
 
     # Print file groups
     console.print("\n[bold cyan]Source Groups and Files:[/bold cyan]")
+    file_type_counter: Counter = Counter()
+    total_files = 0
+
     for group in target.groups:
         if not group.files:
             continue
         console.print(f"  📂 [bold yellow]{group.name}[/bold yellow]")
         for file in group.files:
             console.print(f"    📄 {file.name} [dim]({file.type_name})[/dim]")
+            file_type_counter[file.type_name] += 1
+            total_files += 1
+
+    # File count summary table
+    if total_files > 0:
+        summary_table = Table(title="\nFile Summary", show_header=True, header_style="bold cyan")
+        summary_table.add_column("Type", style="bold")
+        summary_table.add_column("Count", justify="center")
+
+        for file_type, count in file_type_counter.most_common():
+            summary_table.add_row(file_type, str(count))
+        summary_table.add_row("[bold]Total[/bold]", f"[bold]{total_files}[/bold]")
+
+        console.print(summary_table)
 
 
 def main():
@@ -184,6 +235,27 @@ def main():
     p_cmake.add_argument("-p", "--project", help="Path to .uvprojx project file")
     p_cmake.add_argument("-o", "--output", help="Custom output path (defaults to CMakeLists.txt)")
     p_cmake.add_argument("-t", "--target", help="Name of target to export")
+
+    # Command: flash
+    p_flash = subparsers.add_parser("flash", help="Upload compiled firmware to MCU")
+    p_flash.add_argument("-p", "--project", help="Path to .uvprojx project file")
+    p_flash.add_argument("-t", "--target", help="Name of target to flash")
+    p_flash.add_argument("--tool", default="auto", choices=["auto", "stlink", "openocd", "jlink"],
+                         help="Flash tool to use (default: auto-detect)")
+    p_flash.add_argument("--address", default="0x08000000", help="Flash base address (default: 0x08000000)")
+
+    # Command: watch
+    p_watch = subparsers.add_parser("watch", help="Watch source files and auto-rebuild on change")
+    p_watch.add_argument("-p", "--project", help="Path to .uvprojx project file")
+    p_watch.add_argument("-t", "--target", help="Name of target to build")
+    p_watch.add_argument("-r", "--rebuild", action="store_true", help="Full rebuild on change (default: incremental)")
+    p_watch.add_argument("-w", "--wine-path", help="Custom path to Keil compiler UV4.exe executable")
+
+    # Command: diff
+    p_diff = subparsers.add_parser("diff", help="Compare two build targets side-by-side")
+    p_diff.add_argument("-p", "--project", help="Path to .uvprojx project file")
+    p_diff.add_argument("--target-a", required=True, help="First target name")
+    p_diff.add_argument("--target-b", required=True, help="Second target name")
 
     args = parser.parse_args()
 
@@ -258,6 +330,26 @@ def main():
         except Exception as e:
             console.print(f"[bold red]Failed to export to CMakeLists.txt:[/bold red] {e}")
             sys.exit(1)
+
+    elif args.command == "flash":
+        uploader = FlashUploader(project)
+        exit_code = uploader.flash(
+            target_name=args.target or args.default_target,
+            tool=args.tool,
+            address=args.address,
+        )
+        sys.exit(exit_code)
+
+    elif args.command == "watch":
+        watcher = FileWatcher(project, wine_path=getattr(args, "wine_path", None))
+        watcher.watch(
+            target_name=args.target or args.default_target,
+            rebuild=args.rebuild,
+        )
+
+    elif args.command == "diff":
+        differ = TargetDiff(project)
+        differ.diff(args.target_a, args.target_b)
 
 
 if __name__ == "__main__":
