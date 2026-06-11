@@ -40,7 +40,7 @@ Keil uVision is the industry-standard IDE for developing ARM Cortex-M microcontr
 ### From Source
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/uvision-bridge.git
+git clone https://github.com/notEhEnG/keil-bridge.git
 cd uvision-bridge
 
 # Install the package in editable mode
