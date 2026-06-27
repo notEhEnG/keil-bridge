@@ -4,14 +4,14 @@ from rich.table import Table
 
 from keil_bridge.parser import KeilProject
 
-console = Console()
 
 
 class TargetDiff:
     """Compares two build targets within the same Keil project."""
 
-    def __init__(self, project: KeilProject):
+    def __init__(self, project: KeilProject, console: Optional[Console] = None):
         self.project = project
+        self.console = console or Console()
 
     def _get_file_set(self, target_name: str) -> Set[str]:
         """Returns a set of all source file paths in the target."""
@@ -27,15 +27,15 @@ class TargetDiff:
         try:
             ta = self.project.get_target(target_a)
         except ValueError:
-            console.print(f"[bold red]Error:[/bold red] Target '{target_a}' not found.")
+            self.console.print(f"[bold red]Error:[/bold red] Target '{target_a}' not found.")
             return
         try:
             tb = self.project.get_target(target_b)
         except ValueError:
-            console.print(f"[bold red]Error:[/bold red] Target '{target_b}' not found.")
+            self.console.print(f"[bold red]Error:[/bold red] Target '{target_b}' not found.")
             return
 
-        console.print(f"\n[bold]Comparing:[/bold] [cyan]{target_a}[/cyan] vs [cyan]{target_b}[/cyan]\n")
+        self.console.print(f"\n[bold]Comparing:[/bold] [cyan]{target_a}[/cyan] vs [cyan]{target_b}[/cyan]\n")
 
         # --- Device & CPU ---
         props_table = Table(title="Device & Build Configuration", show_header=True, header_style="bold cyan")
@@ -56,7 +56,7 @@ class TargetDiff:
         _diff_row(props_table, "Optimization", ta.optimization or "N/A", tb.optimization or "N/A")
         _diff_row(props_table, "Linker Script", ta.linker_script or "N/A", tb.linker_script or "N/A")
 
-        console.print(props_table)
+        self.console.print(props_table)
 
         # --- Preprocessor Defines ---
         defines_a = set(ta.defines)
@@ -76,7 +76,7 @@ class TargetDiff:
         for d in sorted(only_b_defines):
             defines_table.add_row(f"[green]{d}[/green]", f"[green]only in {target_b}[/green]")
 
-        console.print(defines_table)
+        self.console.print(defines_table)
 
         # --- Include Paths ---
         includes_a = set(ta.include_paths)
@@ -96,7 +96,7 @@ class TargetDiff:
         for p in sorted(only_b_includes):
             includes_table.add_row(f"[green]{p}[/green]", f"[green]only in {target_b}[/green]")
 
-        console.print(includes_table)
+        self.console.print(includes_table)
 
         # --- Source Files ---
         files_a = self._get_file_set(target_a)
@@ -116,7 +116,7 @@ class TargetDiff:
         for f in sorted(only_b_files):
             files_table.add_row(f"[green]{f}[/green]", f"[green]only in {target_b}[/green]")
 
-        console.print(files_table)
+        self.console.print(files_table)
 
         # Summary
         total_diffs = (
@@ -126,6 +126,6 @@ class TargetDiff:
             + len(only_a_files) + len(only_b_files)
         )
         if total_diffs == 0:
-            console.print("\n[bold green]✓ Targets are identical.[/bold green]")
+            self.console.print("\n[bold green]✓ Targets are identical.[/bold green]")
         else:
-            console.print(f"\n[bold yellow]⚠ {total_diffs} difference(s) found.[/bold yellow]")
+            self.console.print(f"\n[bold yellow]⚠ {total_diffs} difference(s) found.[/bold yellow]")

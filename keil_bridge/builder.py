@@ -8,16 +8,15 @@ from rich.console import Console
 
 from keil_bridge.parser import KeilProject
 
-console = Console()
-
 
 class KeilBuilder:
     """Executes the Keil uVision compilation tool (UV4.exe) and colorizes output."""
 
-    def __init__(self, project: KeilProject, wine_path: Optional[str] = None):
+    def __init__(self, project: KeilProject, wine_path: Optional[str] = None, console: Optional[Console] = None):
         self.project = project
         self.is_windows = sys.platform.startswith("win")
         self.wine_path = wine_path or self._find_compiler()
+        self.console = console or Console()
 
     def _find_compiler(self) -> str:
         """Finds the Keil UV4.exe compiler in standard locations."""
@@ -89,28 +88,28 @@ class KeilBuilder:
 
         # Determine colors
         if "error:" in translated.lower() or "error -" in translated.lower() or "fatal error" in translated.lower():
-            console.print(f"[bold red]{translated}[/bold red]")
+            self.console.print(f"[bold red]{translated}[/bold red]")
         elif "warning:" in translated.lower() or "warning -" in translated.lower():
-            console.print(f"[yellow]{translated}[/yellow]")
+            self.console.print(f"[yellow]{translated}[/yellow]")
         elif translated.startswith("compiling") or translated.startswith("assembling"):
-            console.print(f"[cyan]{translated}[/cyan]")
+            self.console.print(f"[cyan]{translated}[/cyan]")
         elif "error(s)," in translated and "warning(s)" in translated:
             # Summary line (e.g. "Target 1" - 0 Error(s), 0 Warning(s).)
             if "0 Error(s)" in translated:
-                console.print(f"[bold green]{translated}[/bold green]")
+                self.console.print(f"[bold green]{translated}[/bold green]")
             else:
-                console.print(f"[bold red]{translated}[/bold red]")
+                self.console.print(f"[bold red]{translated}[/bold red]")
         else:
-            console.print(translated)
+            self.console.print(translated)
 
     def build(self, target_name: Optional[str] = None, rebuild: bool = False) -> int:
         """Triggers the Keil compilation process and streams output."""
         target = self.project.get_target(target_name)
-        console.print(f"[bold blue]Starting Keil Build for Target:[/bold blue] '{target.name}'")
-        console.print(f"[blue]Device:[/blue] {target.device} | [blue]CPU:[/blue] {target.cpu}")
-        console.print(f"[blue]Compiler Executable:[/blue] {self.wine_path}")
+        self.console.print(f"[bold blue]Starting Keil Build for Target:[/bold blue] '{target.name}'")
+        self.console.print(f"[blue]Device:[/blue] {target.device} | [blue]CPU:[/blue] {target.cpu}")
+        self.console.print(f"[blue]Compiler Executable:[/blue] {self.wine_path}")
         if not self.is_windows:
-            console.print("[blue]Execution Environment:[/blue] Linux/macOS (via Wine)")
+            self.console.print("[blue]Execution Environment:[/blue] Linux/macOS (via Wine)")
 
         # Create temporary log file in the project directory
         log_file_name = f".uvision_build_{int(time.time())}.log"
@@ -160,7 +159,7 @@ class KeilBuilder:
                 universal_newlines=True
             )
         except FileNotFoundError:
-            console.print(
+            self.console.print(
                 f"[bold red]Error:[/bold red] Could not launch build process. "
                 f"Make sure compiler executable or 'wine' is installed and in PATH."
             )
@@ -174,48 +173,51 @@ class KeilBuilder:
         # Wait for the log file to be created by Keil
         timeout = 10.0
         start_time = time.time()
-        
-        while process.poll() is None:
-            if not log_opened:
-                if os.path.exists(log_file_path):
+
+        try:
+            while process.poll() is None:
+                if not log_opened:
+                    if os.path.exists(log_file_path):
+                        try:
+                            log_file_handle = open(log_file_path, "r", encoding="utf-8", errors="replace")
+                            log_opened = True
+                        except IOError:
+                            pass
+                    else:
+                        if time.time() - start_time > timeout:
+                            self.console.print("[yellow]Warning: Keil log file creation timed out. Waiting for build to finish...[/yellow]")
+                            break
+                        time.sleep(0.2)
+                        continue
+
+                # Stream new lines
+                if log_file_handle:
+                    log_file_handle.seek(last_position)
+                    lines = log_file_handle.readlines()
+                    if lines:
+                        for line in lines:
+                            self._print_colorized(line)
+                        last_position = log_file_handle.tell()
+                time.sleep(0.1)
+
+            # Wait for process to fully exit and read any remaining lines
+            process.wait()
+
+            # Read final lines
+            if os.path.exists(log_file_path):
+                if not log_file_handle:
                     try:
                         log_file_handle = open(log_file_path, "r", encoding="utf-8", errors="replace")
-                        log_opened = True
                     except IOError:
                         pass
-                else:
-                    if time.time() - start_time > timeout:
-                        console.print("[yellow]Warning: Keil log file creation timed out. Waiting for build to finish...[/yellow]")
-                        break
-                    time.sleep(0.2)
-                    continue
 
-            # Stream new lines
-            if log_file_handle:
-                log_file_handle.seek(last_position)
-                lines = log_file_handle.readlines()
-                if lines:
+                if log_file_handle:
+                    log_file_handle.seek(last_position)
+                    lines = log_file_handle.readlines()
                     for line in lines:
                         self._print_colorized(line)
-                    last_position = log_file_handle.tell()
-            time.sleep(0.1)
-
-        # Wait for process to fully exit and read any remaining lines
-        process.wait()
-        
-        # Read final lines
-        if os.path.exists(log_file_path):
-            if not log_file_handle:
-                try:
-                    log_file_handle = open(log_file_path, "r", encoding="utf-8", errors="replace")
-                except IOError:
-                    pass
-            
+        finally:
             if log_file_handle:
-                log_file_handle.seek(last_position)
-                lines = log_file_handle.readlines()
-                for line in lines:
-                    self._print_colorized(line)
                 log_file_handle.close()
 
             # Clean up log file
@@ -232,14 +234,14 @@ class KeilBuilder:
         # 2: Errors
         # 3: Fatal Errors
         if exit_code == 0:
-            console.print("\n[bold green]✓ Build Succeeded![/bold green]")
+            self.console.print("\n[bold green]✓ Build Succeeded![/bold green]")
         elif exit_code == 1:
-            console.print("\n[bold yellow]⚠ Build Finished with Warnings.[/bold yellow]")
+            self.console.print("\n[bold yellow]⚠ Build Finished with Warnings.[/bold yellow]")
         elif exit_code == 2:
-            console.print("\n[bold red]✗ Build Failed with Errors.[/bold red]")
+            self.console.print("\n[bold red]✗ Build Failed with Errors.[/bold red]")
         elif exit_code == 3:
-            console.print("\n[bold red]✗ Build Failed with Fatal Errors.[/bold red]")
+            self.console.print("\n[bold red]✗ Build Failed with Fatal Errors.[/bold red]")
         else:
-            console.print(f"\n[bold red]✗ Build finished with exit code {exit_code}[/bold red]")
+            self.console.print(f"\n[bold red]✗ Build finished with exit code {exit_code}[/bold red]")
 
         return exit_code

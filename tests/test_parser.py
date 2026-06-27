@@ -244,9 +244,8 @@ class TestKeilBridge(unittest.TestCase):
 
     @patch("keil_bridge.builder.time.time", return_value=1234567890)
     @patch("keil_bridge.builder.time.sleep", return_value=None)
-    @patch("keil_bridge.builder.console.print")
     @patch("keil_bridge.builder.subprocess.Popen")
-    def test_builder_uses_devnull_for_process_streams(self, mock_popen, mock_print, mock_sleep, mock_time):
+    def test_builder_uses_devnull_for_process_streams(self, mock_popen, mock_sleep, mock_time):
         """Verify the build subprocess cannot block on unused stdout/stderr pipes."""
         with tempfile.TemporaryDirectory() as tmpdir:
             self.project.project_dir = tmpdir
@@ -265,7 +264,7 @@ class TestKeilBridge(unittest.TestCase):
 
             mock_popen.side_effect = create_log_file
 
-            builder = KeilBuilder(self.project, wine_path="/opt/Keil/UV4/UV4.exe")
+            builder = KeilBuilder(self.project, wine_path="/opt/Keil/UV4/UV4.exe", console=MagicMock())
             exit_code = builder.build("Target 1")
 
             self.assertEqual(exit_code, 0)
@@ -273,14 +272,14 @@ class TestKeilBridge(unittest.TestCase):
             self.assertEqual(kwargs["stdout"], subprocess.DEVNULL)
             self.assertEqual(kwargs["stderr"], subprocess.DEVNULL)
 
-    @patch("builtins.input", side_effect=["2", "10"])
+    @patch("builtins.input", side_effect=["2", "15"])
     @patch("keil_bridge.cli.show_info")
     def test_interactive_menu_can_continue_after_one_action(self, mock_show_info, mock_input):
         """Verify the interactive menu stays active until the user exits."""
         interactive_menu(SAMPLE_PROJECT_PATH)
         mock_show_info.assert_called_once()
 
-    @patch("builtins.input", side_effect=["1", "1", "2", "2", "10"])
+    @patch("builtins.input", side_effect=["1", "1", "2", "2", "15"])
     @patch("keil_bridge.cli.show_info")
     def test_interactive_menu_can_switch_targets(self, mock_show_info, mock_input):
         """Verify target changes persist for later actions in the same session."""
@@ -294,7 +293,7 @@ class TestKeilBridge(unittest.TestCase):
         mock_show_info.assert_called_once()
         self.assertEqual(mock_show_info.call_args.args[1], "Target 2")
 
-    @patch("builtins.input", side_effect=["2", "10"])
+    @patch("builtins.input", side_effect=["2", "15"])
     @patch("keil_bridge.cli.show_info")
     def test_interactive_menu_can_start_on_explicit_target(self, mock_show_info, mock_input):
         """Verify the initial target prompt is skipped when a target is supplied."""
@@ -421,13 +420,13 @@ class TestTargetDiff(unittest.TestCase):
         self.assertEqual(ta.linker_script, "../linker_v1.sct")
         self.assertEqual(tb.linker_script, "../linker_v2.sct")
 
-    @patch("keil_bridge.target_diff.console.print")
-    def test_diff_runs_without_error(self, mock_print):
+    def test_diff_runs_without_error(self):
         """Verify the diff command runs end-to-end without exceptions."""
-        differ = TargetDiff(self.project)
+        mock_console = MagicMock()
+        differ = TargetDiff(self.project, console=mock_console)
         differ.diff("Target 1", "Target 2")
         # Ensure it printed something (at least the summary line)
-        self.assertTrue(mock_print.called)
+        self.assertTrue(mock_console.print.called)
 
 
 if __name__ == "__main__":

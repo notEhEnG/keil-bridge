@@ -1,7 +1,8 @@
 import os
+import re
 import subprocess
 import sys
-from typing import List
+from typing import Optional
 from rich.console import Console
 
 from keil_bridge.parser import KeilProject, KeilTarget
@@ -13,7 +14,7 @@ class Linter:
         self.project = project
         self.console = console
 
-    def lint(self, target_name: str = None):
+    def lint(self, target_name: Optional[str] = None):
         target = self.project.get_target(target_name)
         
         # Gather all C/C++ files
@@ -36,9 +37,12 @@ class Linter:
             abs_inc = os.path.normpath(os.path.join(self.project.project_dir, inc))
             compiler_args.append(f"-I{abs_inc}")
 
-        # Basic flags for embedded ARM
+        # Derive CPU flag from target CPU string
+        cpu_match = re.search(r'Cortex-M\d+?', target.cpu, re.IGNORECASE)
+        mcpu = cpu_match.group(0).lower() if cpu_match else "cortex-m3"
+
         compiler_args.extend([
-            "-mcpu=cortex-m3", # Dummy arch to satisfy parser
+            f"-mcpu={mcpu}",
             "-mthumb",
             "-ffreestanding"
         ])

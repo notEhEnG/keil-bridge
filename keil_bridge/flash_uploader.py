@@ -1,13 +1,10 @@
 import os
 import shutil
 import subprocess
-import sys
 from typing import Optional
 from rich.console import Console
 
 from keil_bridge.parser import KeilProject
-
-console = Console()
 
 
 class FlashUploader:
@@ -28,8 +25,9 @@ class FlashUploader:
         },
     }
 
-    def __init__(self, project: KeilProject):
+    def __init__(self, project: KeilProject, console: Optional[Console] = None):
         self.project = project
+        self.console = console or Console()
 
     def _find_tool(self, tool_name: str) -> Optional[str]:
         """Checks if a specific flash tool is available on the system PATH."""
@@ -77,7 +75,7 @@ class FlashUploader:
         """Flashes firmware using st-flash."""
         cmd_name = self._find_tool("stlink")
         if not cmd_name:
-            console.print("[bold red]Error:[/bold red] st-flash not found in PATH.")
+            self.console.print("[bold red]Error:[/bold red] st-flash not found in PATH.")
             return -1
 
         if firmware_path.endswith(".hex"):
@@ -85,19 +83,19 @@ class FlashUploader:
         else:
             cmd = [cmd_name, "write", firmware_path, address]
 
-        console.print(f"[cyan]Running:[/cyan] {' '.join(cmd)}")
+        self.console.print(f"[cyan]Running:[/cyan] {' '.join(cmd)}")
         try:
             result = subprocess.run(cmd, capture_output=False)
             return result.returncode
         except Exception as e:
-            console.print(f"[bold red]Flash failed:[/bold red] {e}")
+            self.console.print(f"[bold red]Flash failed:[/bold red] {e}")
             return -1
 
     def _flash_openocd(self, firmware_path: str, target_device: str = "") -> int:
         """Flashes firmware using OpenOCD."""
         cmd_name = self._find_tool("openocd")
         if not cmd_name:
-            console.print("[bold red]Error:[/bold red] openocd not found in PATH.")
+            self.console.print("[bold red]Error:[/bold red] openocd not found in PATH.")
             return -1
 
         # Auto-detect interface and target config
@@ -122,22 +120,22 @@ class FlashUploader:
             cmd_name,
             "-f", interface,
             "-f", target_cfg,
-            "-c", "program {} verify reset exit".format(firmware_path),
+            "-c", 'program "{}" verify reset exit'.format(firmware_path),
         ]
 
-        console.print(f"[cyan]Running:[/cyan] {' '.join(cmd)}")
+        self.console.print(f"[cyan]Running:[/cyan] {' '.join(cmd)}")
         try:
             result = subprocess.run(cmd, capture_output=False)
             return result.returncode
         except Exception as e:
-            console.print(f"[bold red]Flash failed:[/bold red] {e}")
+            self.console.print(f"[bold red]Flash failed:[/bold red] {e}")
             return -1
 
     def _flash_jlink(self, firmware_path: str, target_device: str = "STM32F103C8") -> int:
         """Flashes firmware using J-Link Commander."""
         cmd_name = self._find_tool("jlink")
         if not cmd_name:
-            console.print("[bold red]Error:[/bold red] JLinkExe not found in PATH.")
+            self.console.print("[bold red]Error:[/bold red] JLinkExe not found in PATH.")
             return -1
 
         # Create a temporary JLink command script
@@ -158,11 +156,11 @@ class FlashUploader:
                 f.write(script_content)
 
             cmd = [cmd_name, "-CommandFile", jlink_script]
-            console.print(f"[cyan]Running:[/cyan] {' '.join(cmd)}")
+            self.console.print(f"[cyan]Running:[/cyan] {' '.join(cmd)}")
             result = subprocess.run(cmd, capture_output=False)
             return result.returncode
         except Exception as e:
-            console.print(f"[bold red]Flash failed:[/bold red] {e}")
+            self.console.print(f"[bold red]Flash failed:[/bold red] {e}")
             return -1
         finally:
             if os.path.exists(jlink_script):
@@ -176,42 +174,42 @@ class FlashUploader:
     ) -> int:
         """Main flash method. Detects tool and firmware, then uploads."""
         target = self.project.get_target(target_name)
-        console.print(f"[bold blue]Preparing to flash target:[/bold blue] '{target.name}'")
-        console.print(f"[blue]Device:[/blue] {target.device}")
+        self.console.print(f"[bold blue]Preparing to flash target:[/bold blue] '{target.name}'")
+        self.console.print(f"[blue]Device:[/blue] {target.device}")
 
         # Resolve firmware path
         firmware_path = self._resolve_firmware_path(target_name)
         if not firmware_path:
-            console.print(
+            self.console.print(
                 "[bold red]Error:[/bold red] Could not find compiled firmware "
                 "(.hex/.bin). Please build the project first."
             )
             return -1
 
-        console.print(f"[blue]Firmware:[/blue] {firmware_path}")
+        self.console.print(f"[blue]Firmware:[/blue] {firmware_path}")
 
         # Resolve flash tool
         if tool == "auto":
             detected = self._auto_detect_tool()
             if not detected:
-                console.print(
+                self.console.print(
                     "[bold red]Error:[/bold red] No supported flash tool found. "
                     "Install one of: st-flash, openocd, JLinkExe"
                 )
                 return -1
             tool = detected
             tool_desc = self.SUPPORTED_TOOLS[tool]["description"]
-            console.print(f"[blue]Flash Tool:[/blue] {tool_desc} (auto-detected)")
+            self.console.print(f"[blue]Flash Tool:[/blue] {tool_desc} (auto-detected)")
         else:
             if tool not in self.SUPPORTED_TOOLS:
-                console.print(f"[bold red]Error:[/bold red] Unknown tool '{tool}'. Use: stlink, openocd, jlink")
+                self.console.print(f"[bold red]Error:[/bold red] Unknown tool '{tool}'. Use: stlink, openocd, jlink")
                 return -1
             if not self._find_tool(tool):
                 tool_desc = self.SUPPORTED_TOOLS[tool]["description"]
-                console.print(f"[bold red]Error:[/bold red] {tool_desc} not found in PATH.")
+                self.console.print(f"[bold red]Error:[/bold red] {tool_desc} not found in PATH.")
                 return -1
 
-        console.print("")
+        self.console.print("")
 
         # Execute flash
         if tool == "stlink":
@@ -224,8 +222,8 @@ class FlashUploader:
             exit_code = -1
 
         if exit_code == 0:
-            console.print("\n[bold green]✓ Flash Succeeded![/bold green]")
+            self.console.print("\n[bold green]✓ Flash Succeeded![/bold green]")
         else:
-            console.print(f"\n[bold red]✗ Flash Failed (exit code {exit_code})[/bold red]")
+            self.console.print(f"\n[bold red]✗ Flash Failed (exit code {exit_code})[/bold red]")
 
         return exit_code

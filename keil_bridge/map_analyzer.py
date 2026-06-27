@@ -1,10 +1,10 @@
 import os
 import re
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
-from rich.progress import track
+
 
 from keil_bridge.parser import KeilProject, KeilTarget
 
@@ -35,7 +35,7 @@ class MapAnalyzer:
 
         raise FileNotFoundError(f"Could not find map file '{map_filename}' in Listing or Output directories.")
 
-    def parse_and_show(self, target_name: str = None):
+    def parse_and_show(self, target_name: Optional[str] = None):
         target = self.project.get_target(target_name)
         try:
             map_file = self.find_map_file(target)

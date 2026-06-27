@@ -6,15 +6,15 @@ from rich.console import Console
 from keil_bridge.parser import KeilProject
 from keil_bridge.builder import KeilBuilder
 
-console = Console()
 
 
 class FileWatcher:
     """Watches project source files for changes and auto-triggers a rebuild."""
 
-    def __init__(self, project: KeilProject, wine_path: Optional[str] = None):
+    def __init__(self, project: KeilProject, wine_path: Optional[str] = None, console: Optional[Console] = None):
         self.project = project
         self.wine_path = wine_path
+        self.console = console or Console()
         self._debounce_window = 0.3  # seconds
 
     def _collect_source_paths(self, target_name: Optional[str] = None) -> Dict[str, float]:
@@ -40,14 +40,14 @@ class FileWatcher:
             poll_interval: Seconds between each filesystem poll cycle.
         """
         target = self.project.get_target(target_name)
-        console.print(f"[bold blue]Watching target:[/bold blue] '{target.name}'")
-        console.print(f"[blue]Device:[/blue] {target.device}")
-        console.print(f"[blue]Mode:[/blue] {'Full Rebuild' if rebuild else 'Incremental Build'}")
+        self.console.print(f"[bold blue]Watching target:[/bold blue] '{target.name}'")
+        self.console.print(f"[blue]Device:[/blue] {target.device}")
+        self.console.print(f"[blue]Mode:[/blue] {'Full Rebuild' if rebuild else 'Incremental Build'}")
 
         # Initial scan
         file_mtimes = self._collect_source_paths(target_name)
-        console.print(f"[blue]Tracking:[/blue] {len(file_mtimes)} source files")
-        console.print("[dim]Press Ctrl+C to stop watching.[/dim]\n")
+        self.console.print(f"[blue]Tracking:[/blue] {len(file_mtimes)} source files")
+        self.console.print("[dim]Press Ctrl+C to stop watching.[/dim]\n")
 
         try:
             while True:
@@ -77,15 +77,15 @@ class FileWatcher:
                     # Debounce: wait briefly for rapid successive saves
                     time.sleep(self._debounce_window)
 
-                    console.print(f"\n[bold yellow]⚡ Change detected in {len(changed_files)} file(s):[/bold yellow]")
+                    self.console.print(f"\n[bold yellow]⚡ Change detected in {len(changed_files)} file(s):[/bold yellow]")
                     for cf in changed_files:
                         basename = os.path.basename(cf)
-                        console.print(f"  → [cyan]{basename}[/cyan]")
+                        self.console.print(f"  → [cyan]{basename}[/cyan]")
 
-                    console.print("")
+                    self.console.print("")
                     builder = KeilBuilder(self.project, wine_path=self.wine_path)
                     builder.build(target_name, rebuild=rebuild)
-                    console.print("\n[dim]Watching for changes...[/dim]")
+                    self.console.print("\n[dim]Watching for changes...[/dim]")
 
         except KeyboardInterrupt:
-            console.print("\n[blue]Watcher stopped.[/blue]")
+            self.console.print("\n[blue]Watcher stopped.[/blue]")

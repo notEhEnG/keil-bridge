@@ -249,10 +249,11 @@ class KeilProject:
         if not self.targets:
             raise ValueError("No targets found in the project.")
         
-        target_name = name or self.active_target_name
-        if not target_name or target_name not in self.targets:
-            # Fallback to the first target if the specified one doesn't exist
-            first_target = list(self.targets.keys())[0]
-            return self.targets[first_target]
+        if name is not None:
+            if name not in self.targets:
+                available = ', '.join(self.targets.keys())
+                raise ValueError(f"Target '{name}' not found. Available targets: {available}")
+            return self.targets[name]
         
+        target_name = self.active_target_name or next(iter(self.targets))
         return self.targets[target_name]

@@ -1,6 +1,7 @@
 import os
 import glob
 import shutil
+from typing import Optional
 from rich.console import Console
 
 from keil_bridge.parser import KeilProject
@@ -17,7 +18,7 @@ class ProjectCleaner:
             "*.axf", "*.hex", "*.bin", "*.sct", "*.dep", "*.build_log.htm"
         ]
 
-    def clean(self, target_name: str = None, all_targets: bool = False):
+    def clean(self, target_name: Optional[str] = None, all_targets: bool = False):
         if all_targets:
             targets_to_clean = list(self.project.targets.values())
         else:

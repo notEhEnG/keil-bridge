@@ -115,10 +115,10 @@ def interactive_menu(project_path: str, initial_target: Optional[str] = None):
             elif action == "2":
                 show_info(project, selected_target)
             elif action == "3":
-                builder = KeilBuilder(project)
+                builder = KeilBuilder(project, console=console)
                 builder.build(selected_target, rebuild=False)
             elif action == "4":
-                builder = KeilBuilder(project)
+                builder = KeilBuilder(project, console=console)
                 builder.build(selected_target, rebuild=True)
             elif action == "5":
                 generator = LspGenerator(project)
@@ -129,10 +129,10 @@ def interactive_menu(project_path: str, initial_target: Optional[str] = None):
                 out_file = exporter.export(target_name=selected_target)
                 console.print(f"[bold green]✓[/bold green] Exported CMakeLists.txt at: [cyan]{out_file}[/cyan]")
             elif action == "7":
-                uploader = FlashUploader(project)
+                uploader = FlashUploader(project, console=console)
                 uploader.flash(target_name=selected_target)
             elif action == "8":
-                watcher = FileWatcher(project)
+                watcher = FileWatcher(project, console=console)
                 watcher.watch(target_name=selected_target)
             elif action == "9":
                 if len(targets) < 2:
@@ -145,7 +145,7 @@ def interactive_menu(project_path: str, initial_target: Optional[str] = None):
                     choice_a = int(input("Enter number for Target A: ").strip()) - 1
                     choice_b = int(input("Enter number for Target B: ").strip()) - 1
                     if 0 <= choice_a < len(targets) and 0 <= choice_b < len(targets):
-                        differ = TargetDiff(project)
+                        differ = TargetDiff(project, console=console)
                         differ.diff(targets[choice_a], targets[choice_b])
                     else:
                         console.print("[red]Invalid target selection.[/red]")
@@ -228,6 +228,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="A modern cross-platform CLI tool for compiling, configuring LSP, and exporting Keil uVision projects."
     )
+    parser.add_argument("--version", action="version", version="%(prog)s 0.1.0")
     parser.add_argument(
         "-t",
         "--target",
@@ -357,71 +358,75 @@ def main():
         console.print(Panel(f"[bold red]Failed to load project file:[/bold red]\n{e}", title="Error"))
         sys.exit(1)
 
-    if args.command == "info":
-        show_info(project, args.target or args.default_target)
+    try:
+        if args.command == "info":
+            show_info(project, args.target or args.default_target)
 
-    elif args.command == "build":
-        builder = KeilBuilder(project, wine_path=args.wine_path)
-        exit_code = builder.build(args.target or args.default_target, rebuild=args.rebuild)
-        sys.exit(exit_code)
+        elif args.command == "build":
+            builder = KeilBuilder(project, wine_path=args.wine_path, console=console)
+            exit_code = builder.build(args.target or args.default_target, rebuild=args.rebuild)
+            sys.exit(exit_code)
 
-    elif args.command == "lsp":
-        generator = LspGenerator(project)
-        try:
-            out_file = generator.write_to_file(args.output, args.target or args.default_target, args.compiler)
-            console.print(f"[bold green]✓[/bold green] Generated compilation database at: [cyan]{out_file}[/cyan]")
-        except Exception as e:
-            console.print(f"[bold red]Failed to generate compilation database:[/bold red] {e}")
-            sys.exit(1)
+        elif args.command == "lsp":
+            generator = LspGenerator(project)
+            try:
+                out_file = generator.write_to_file(args.output, args.target or args.default_target, args.compiler)
+                console.print(f"[bold green]✓[/bold green] Generated compilation database at: [cyan]{out_file}[/cyan]")
+            except Exception as e:
+                console.print(f"[bold red]Failed to generate compilation database:[/bold red] {e}")
+                sys.exit(1)
 
-    elif args.command == "cmake":
-        exporter = CMakeExporter(project)
-        try:
-            out_file = exporter.export(args.output, args.target or args.default_target)
-            console.print(f"[bold green]✓[/bold green] Exported CMakeLists.txt at: [cyan]{out_file}[/cyan]")
-        except Exception as e:
-            console.print(f"[bold red]Failed to export to CMakeLists.txt:[/bold red] {e}")
-            sys.exit(1)
+        elif args.command == "cmake":
+            exporter = CMakeExporter(project)
+            try:
+                out_file = exporter.export(args.output, args.target or args.default_target)
+                console.print(f"[bold green]✓[/bold green] Exported CMakeLists.txt at: [cyan]{out_file}[/cyan]")
+            except Exception as e:
+                console.print(f"[bold red]Failed to export to CMakeLists.txt:[/bold red] {e}")
+                sys.exit(1)
 
-    elif args.command == "flash":
-        uploader = FlashUploader(project)
-        exit_code = uploader.flash(
-            target_name=args.target or args.default_target,
-            tool=args.tool,
-            address=args.address,
-        )
-        sys.exit(exit_code)
+        elif args.command == "flash":
+            uploader = FlashUploader(project, console=console)
+            exit_code = uploader.flash(
+                target_name=args.target or args.default_target,
+                tool=args.tool,
+                address=args.address,
+            )
+            sys.exit(exit_code)
 
-    elif args.command == "watch":
-        watcher = FileWatcher(project, wine_path=getattr(args, "wine_path", None))
-        watcher.watch(
-            target_name=args.target or args.default_target,
-            rebuild=args.rebuild,
-        )
+        elif args.command == "watch":
+            watcher = FileWatcher(project, wine_path=getattr(args, "wine_path", None), console=console)
+            watcher.watch(
+                target_name=args.target or args.default_target,
+                rebuild=args.rebuild,
+            )
 
-    elif args.command == "diff":
-        differ = TargetDiff(project)
-        differ.diff(args.target_a, args.target_b)
+        elif args.command == "diff":
+            differ = TargetDiff(project, console=console)
+            differ.diff(args.target_a, args.target_b)
 
-    elif args.command == "size":
-        analyzer = MapAnalyzer(project, console)
-        analyzer.parse_and_show(args.target or args.default_target)
+        elif args.command == "size":
+            analyzer = MapAnalyzer(project, console)
+            analyzer.parse_and_show(args.target or args.default_target)
 
-    elif args.command == "vscode":
-        generator = VSCodeGenerator(project, console)
-        generator.generate(args.target or args.default_target, args.debugger)
+        elif args.command == "vscode":
+            generator = VSCodeGenerator(project, console)
+            generator.generate(args.target or args.default_target, args.debugger)
 
-    elif args.command == "lint":
-        linter = Linter(project, console)
-        linter.lint(args.target or args.default_target)
+        elif args.command == "lint":
+            linter = Linter(project, console)
+            linter.lint(args.target or args.default_target)
 
-    elif args.command == "ci":
-        generator = CIGenerator(project, console)
-        generator.generate(args.provider)
+        elif args.command == "ci":
+            generator = CIGenerator(project, console)
+            generator.generate(args.provider)
 
-    elif args.command == "clean":
-        cleaner = ProjectCleaner(project, console)
-        cleaner.clean(args.target or args.default_target, all_targets=args.all)
+        elif args.command == "clean":
+            cleaner = ProjectCleaner(project, console)
+            cleaner.clean(args.target or args.default_target, all_targets=args.all)
+    except ValueError as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

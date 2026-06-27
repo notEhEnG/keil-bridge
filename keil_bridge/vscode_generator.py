@@ -1,6 +1,6 @@
 import os
 import json
-from typing import Dict, Any
+from typing import Dict, Optional
 from rich.console import Console
 
 from keil_bridge.parser import KeilProject, KeilTarget
@@ -13,7 +13,7 @@ class VSCodeGenerator:
         self.console = console
         self.vscode_dir = os.path.join(self.project.project_dir, ".vscode")
 
-    def generate(self, target_name: str = None, debugger: str = "stlink") -> None:
+    def generate(self, target_name: Optional[str] = None, debugger: str = "stlink") -> None:
         target = self.project.get_target(target_name)
         
         # Ensure .vscode directory exists
